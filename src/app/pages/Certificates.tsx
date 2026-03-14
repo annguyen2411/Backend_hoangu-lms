@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Award, Download, Share2, Eye, CheckCircle } from 'lucide-react';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { authUtils } from '../utils/auth';
 import { certificateGenerator, Certificate } from '../utils/certificateGenerator';
 import { dataExport } from '../utils/dataExport';
