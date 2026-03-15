@@ -35,6 +35,19 @@ export async function createPayment(
   amountVnd: number,
   paymentMethod: 'bank_transfer' | 'momo'
 ): Promise<PaymentRecord> {
+  if (!supabase) {
+    return {
+      id: 'mock-payment-' + Date.now(),
+      user_id: 'mock-user-1',
+      course_id: courseId,
+      amount_vnd: amountVnd,
+      payment_method: paymentMethod,
+      status: 'pending',
+      transaction_id: 'MOCK' + Date.now(),
+      created_at: new Date().toISOString(),
+    };
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) throw new Error('Vui lòng đăng nhập để thanh toán');
@@ -59,6 +72,19 @@ export async function createPayment(
 }
 
 export async function getPaymentStatus(paymentId: string): Promise<PaymentRecord> {
+  if (!supabase) {
+    return {
+      id: paymentId,
+      user_id: 'mock-user-1',
+      course_id: 'mock-course',
+      amount_vnd: 299000,
+      payment_method: 'bank_transfer',
+      status: 'pending',
+      transaction_id: 'MOCK' + paymentId,
+      created_at: new Date().toISOString(),
+    };
+  }
+
   const { data, error } = await supabase
     .from('payments')
     .select('*')
@@ -73,6 +99,8 @@ export async function verifyPayment(
   transactionId: string,
   status: 'completed' | 'failed'
 ): Promise<void> {
+  if (!supabase) return;
+
   const { error } = await supabase
     .from('payments')
     .update({
