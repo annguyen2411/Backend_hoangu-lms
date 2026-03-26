@@ -26,6 +26,7 @@ export function Auth() {
         return;
       }
       authUtils.login(formData.email, formData.password);
+      window.dispatchEvent(new Event('auth-change'));
       navigate('/dashboard');
     } else {
       if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
@@ -37,13 +38,14 @@ export function Auth() {
         return;
       }
       authUtils.register(formData.name, formData.email, formData.password);
+      window.dispatchEvent(new Event('auth-change'));
       navigate('/dashboard');
     }
   };
 
   const handleSocialLogin = (provider: string) => {
-    // Mock social login
     authUtils.login(`user@${provider}.com`, 'password');
+    window.dispatchEvent(new Event('auth-change'));
     navigate('/dashboard');
   };
 

@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Star, Clock, BookOpen, Users, Award, Play, Lock, CheckCircle, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
 import { courses, reviews } from '../data/mockData';
 import { authUtils } from '../utils/auth';
@@ -13,7 +13,15 @@ export function CourseDetail() {
   const course = courses.find((c) => c.slug === slug);
   const [activeTab, setActiveTab] = useState<'intro' | 'curriculum' | 'reviews' | 'teacher'>('intro');
   const [expandedLessons, setExpandedLessons] = useState<Set<string>>(new Set(['1-1']));
-  const user = authUtils.getCurrentUser();
+  const [user, setUser] = useState(() => authUtils.getCurrentUser());
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setUser(authUtils.getCurrentUser());
+    };
+    window.addEventListener('auth-change', handleAuthChange);
+    return () => window.removeEventListener('auth-change', handleAuthChange);
+  }, []);
 
   if (!course) {
     return (
@@ -44,6 +52,7 @@ export function CourseDetail() {
       return;
     }
     authUtils.enrollCourse(course.id);
+    window.dispatchEvent(new Event('auth-change'));
     navigate('/dashboard');
   };
 
