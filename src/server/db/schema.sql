@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(255) NOT NULL,
   avatar_url TEXT,
-  role VARCHAR(50) DEFAULT 'student' CHECK (role IN ('student', 'teacher', 'admin')),
+  role VARCHAR(50) DEFAULT 'student' CHECK (role IN ('student', 'teacher', 'admin', 'instructor')),
+  mshv VARCHAR(50),
   level INTEGER DEFAULT 1,
   xp INTEGER DEFAULT 0,
   total_xp INTEGER DEFAULT 0,
@@ -54,6 +55,11 @@ CREATE TABLE IF NOT EXISTS courses (
   has_certificate BOOLEAN DEFAULT false,
   is_published BOOLEAN DEFAULT false,
   is_featured BOOLEAN DEFAULT false,
+  course_type VARCHAR(20) DEFAULT 'paid' CHECK (course_type IN ('free', 'paid')),
+  is_free_for_all BOOLEAN DEFAULT false,
+  free_for_users JSONB DEFAULT '[]',
+  teacher_id UUID REFERENCES users(id),
+  created_by UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

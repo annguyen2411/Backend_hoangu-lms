@@ -29,21 +29,38 @@ const requireInstructor = async (req: any, res: any, next: any) => {
 };
 
 const canManageCourse = async (req: any, res: any, next: any) => {
-  const { id } = req.params;
-  const course = await query('SELECT teacher_id FROM courses WHERE id = $1', [id]);
-  if (course.rows.length === 0) {
-    return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
-  }
-  const user = await query('SELECT role FROM users WHERE id = $1', [req.userId]);
-  if (['admin', 'super_admin'].includes(user.rows[0]?.role) || course.rows[0].teacher_id === req.userId) {
+  try {
+    const { id } = req.params;
+    const user = await query('SELECT role FROM users WHERE id = $1', [req.userId]);
+    const userRole = user.rows[0]?.role;
+    
+    if (['admin', 'super_admin'].includes(userRole)) {
+      return next();
+    }
+    
+    try {
+      const course = await query('SELECT teacher_id, created_by FROM courses WHERE id = $1', [id]);
+      if (course.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
+      }
+      const courseCreator = course.rows[0]?.teacher_id || course.rows[0]?.created_by;
+      if (courseCreator && courseCreator === req.userId) {
+        return next();
+      }
+    } catch (e) {
+      console.log('Course creator check skipped - columns may not exist');
+    }
+    
     return next();
+  } catch (error: any) {
+    console.error('canManageCourse error:', error.message);
+    return res.status(500).json({ success: false, error: 'Lỗi kiểm tra quyền' });
   }
-  return res.status(403).json({ success: false, error: 'Không có quyền quản lý khóa học này' });
 };
 
 router.get('/', async (req, res) => {
   try {
-    const { category, level, featured, published = 'true', page = '1', limit = '20' } = req.query;
+    const { category, level, featured, published = 'true', page = '1', limit = '20', free = 'false' } = req.query;
 
     let sql = 'SELECT * FROM courses WHERE 1=1';
     const params: any[] = [];
@@ -69,6 +86,10 @@ router.get('/', async (req, res) => {
       params.push(level);
     }
 
+    if (free === 'true') {
+      sql += ` AND course_type = 'free'`;
+    }
+
     const countResult = await query(sql.replace('SELECT *', 'SELECT COUNT(*)'), params);
     const total = parseInt(countResult.rows[0].count);
 
@@ -89,6 +110,61 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Get courses error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+// Check if user can access course for free
+router.get('/:id/check-access', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+
+    const course = await query('SELECT * FROM courses WHERE id = $1', [id]);
+    if (course.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
+    }
+
+    const courseData = course.rows[0];
+    
+    // Check if course is free type
+    if (courseData.course_type === 'free') {
+      // Free for everyone
+      if (courseData.is_free_for_all) {
+        return res.json({ success: true, data: { canAccess: true, reason: 'free_for_all' } });
+      }
+      
+      // Check if user is in free_for_users list
+      const freeForUsers = courseData.free_for_users || [];
+      if (freeForUsers.includes(userId)) {
+        return res.json({ success: true, data: { canAccess: true, reason: 'free_for_user' } });
+      }
+    }
+
+    // Check if user has enrollment
+    const enrollment = await query(
+      'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2 AND status = $3',
+      [userId, id, 'active']
+    );
+    
+    if (enrollment.rows.length > 0) {
+      return res.json({ success: true, data: { canAccess: true, reason: 'enrolled' } });
+    }
+
+    // Check if user has completed payment
+    const payment = await query(
+      `SELECT * FROM payments WHERE user_id = $1 AND course_id = $2 AND status = 'completed'`,
+      [userId, id]
+    );
+    
+    if (payment.rows.length > 0) {
+      return res.json({ success: true, data: { canAccess: true, reason: 'paid' } });
+    }
+
+    // Not free - requires payment
+    res.json({ success: true, data: { canAccess: false, reason: 'requires_payment' } });
+  } catch (error) {
+    console.error('Check access error:', error);
     res.status(500).json({ success: false, error: 'Lỗi server' });
   }
 });
@@ -132,13 +208,13 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', authenticate, requireInstructor, async (req, res) => {
   try {
-    const { title, slug, description, thumbnail_url, teacher_name, level, category, price_vnd, original_price_vnd, discount_percent, has_certificate, is_published, is_featured } = req.body;
+    const { title, slug, description, thumbnail_url, teacher_name, level, category, price_vnd, original_price_vnd, discount_percent, has_certificate, is_published, is_featured, course_type, is_free_for_all, free_for_users } = req.body;
 
     const result = await query(
-      `INSERT INTO courses (title, slug, description, thumbnail_url, teacher_name, level, category, price_vnd, original_price_vnd, discount_percent, has_certificate, is_published, is_featured)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO courses (title, slug, description, thumbnail_url, teacher_name, level, category, price_vnd, original_price_vnd, discount_percent, has_certificate, is_published, is_featured, course_type, is_free_for_all, free_for_users)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
-      [title, slug, description, thumbnail_url, teacher_name, level || 'beginner', category, price_vnd || 0, original_price_vnd, discount_percent || 0, has_certificate || false, is_published || false, is_featured || false]
+      [title, slug, description, thumbnail_url, teacher_name, level || 'beginner', category, price_vnd || 0, original_price_vnd, discount_percent || 0, has_certificate || false, is_published || false, is_featured || false, course_type || 'paid', is_free_for_all || false, free_for_users || []]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -151,35 +227,60 @@ router.post('/', authenticate, requireInstructor, async (req, res) => {
 router.put('/:id', authenticate, requireInstructor, canManageCourse, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, slug, description, thumbnail_url, teacher_name, level, category, price_vnd, original_price_vnd, discount_percent, has_certificate, is_published, is_featured, total_lessons, students_enrolled, rating } = req.body;
+    const updates = req.body;
+
+    const allowedFields = [
+      'title', 'slug', 'description', 'thumbnail_url', 'teacher_name',
+      'level', 'category', 'price_vnd', 'original_price_vnd', 'discount_percent',
+      'has_certificate', 'is_published', 'is_featured', 'total_lessons',
+      'students_enrolled', 'rating', 'duration_hours'
+    ];
+
+    const courseTypeFields = ['course_type', 'is_free_for_all', 'free_for_users'];
+    
+    try {
+      const tableInfo = await query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'courses'"
+      );
+      const existingColumns = tableInfo.rows.map((r: any) => r.column_name);
+      
+      for (const field of courseTypeFields) {
+        if (existingColumns.includes(field)) {
+          allowedFields.push(field);
+        }
+      }
+    } catch (e) {
+      console.log('Could not get table info, using basic fields');
+    }
+
+    const updateData: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key) && value !== undefined) {
+        if (key === 'free_for_users') {
+          updateData[key] = Array.isArray(value) ? JSON.stringify(value) : value;
+        } else {
+          updateData[key] = value;
+        }
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, error: 'Không có dữ liệu để cập nhật' });
+    }
+
+    const setClauses = Object.keys(updateData).map((key, idx) => `${key} = $${idx + 1}`).join(', ');
+    const values = [...Object.values(updateData), id];
 
     const result = await query(
-      `UPDATE courses 
-       SET title = COALESCE($1, title),
-           slug = COALESCE($2, slug),
-           description = COALESCE($3, description),
-           thumbnail_url = COALESCE($4, thumbnail_url),
-           teacher_name = COALESCE($5, teacher_name),
-           level = COALESCE($6, level),
-           category = COALESCE($7, category),
-           price_vnd = COALESCE($8, price_vnd),
-           original_price_vnd = COALESCE($9, original_price_vnd),
-           discount_percent = COALESCE($10, discount_percent),
-           has_certificate = COALESCE($11, has_certificate),
-           is_published = COALESCE($12, is_published),
-           is_featured = COALESCE($13, is_featured),
-           total_lessons = COALESCE($14, total_lessons),
-           students_enrolled = COALESCE($15, students_enrolled),
-           rating = COALESCE($16, rating)
-       WHERE id = $17
-       RETURNING *`,
-      [title, slug, description, thumbnail_url, teacher_name, level, category, price_vnd, original_price_vnd, discount_percent, has_certificate, is_published, is_featured, total_lessons, students_enrolled, rating, id]
+      `UPDATE courses SET ${setClauses}, updated_at = NOW() WHERE id = $${Object.keys(updateData).length + 1} RETURNING *`,
+      values
     );
 
     res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Update course error:', error);
-    res.status(500).json({ success: false, error: 'Lỗi server' });
+    res.status(500).json({ success: false, error: 'Lỗi server', details: error.message });
   }
 });
 

@@ -1,6 +1,7 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../db/pool';
+import { pronunciationService } from '../utils/pronunciation';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -240,38 +241,111 @@ router.post('/history', authenticate, async (req, res) => {
   }
 });
 
-// Voice Practice
-router.post('/voice-practice', authenticate, async (req, res) => {
+// Voice Practice with AI Pronunciation Scoring
+router.post('/voice-practice', authenticate, async (req: Request, res: Response) => {
   try {
-    const { lesson_id, vocabulary_id, recording_url, transcript, score, feedback } = req.body;
+    const { lesson_id, vocabulary_id, recording_url, expected_text, language } = req.body;
+
+    let transcript = '';
+    let score: number | null = null;
+    let feedback = '';
+
+    if (expected_text && recording_url) {
+      const analysis = await pronunciationService.analyzePronunciation(
+        recording_url,
+        expected_text,
+        language || 'zh-CN'
+      );
+      transcript = analysis.transcript;
+      score = analysis.score;
+      feedback = analysis.feedback;
+    }
+
     const result = await query(
       `INSERT INTO voice_practices (user_id, lesson_id, vocabulary_id, recording_url, transcript, score, feedback)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [req.userId, lesson_id, vocabulary_id, recording_url, transcript, score, feedback]
     );
-    res.json({ success: true, data: result.rows[0] });
+
+    const practice = result.rows[0];
+
+    if (score !== null) {
+      await query(
+        `INSERT INTO activities (user_id, type, description, metadata)
+         VALUES ($1, 'voice_practice', 'Practiced pronunciation', $2)`,
+        [req.userId, JSON.stringify({ vocabulary_id, score })]
+      );
+    }
+
+    res.json({ success: true, data: practice });
   } catch (error) {
     console.error('Save voice practice error:', error);
     res.status(500).json({ success: false, error: 'Lỗi server' });
   }
 });
 
-router.get('/voice-practice', authenticate, async (req, res) => {
+router.post('/voice-practice/analyze', authenticate, async (req: Request, res: Response) => {
   try {
+    const { recording_url, expected_text, language } = req.body;
+
+    if (!recording_url || !expected_text) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'recording_url and expected_text are required' 
+      });
+    }
+
+    const analysis = await pronunciationService.analyzePronunciation(
+      recording_url,
+      expected_text,
+      language || 'zh-CN'
+    );
+
+    res.json({ success: true, data: analysis });
+  } catch (error) {
+    console.error('Analyze pronunciation error:', error);
+    res.status(500).json({ success: false, error: 'Failed to analyze pronunciation' });
+  }
+});
+
+router.get('/voice-practice', authenticate, async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 20;
     const result = await query(
       `SELECT vp.*, v.word, v.pinyin, v.meaning
        FROM voice_practices vp
        LEFT JOIN vocabulary v ON vp.vocabulary_id = v.id
        WHERE vp.user_id = $1
        ORDER BY vp.created_at DESC
-       LIMIT 20`,
-      [req.userId]
+       LIMIT $2`,
+      [req.userId, limit]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('Get voice practices error:', error);
     res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.get('/voice-practice/stats', authenticate, async (req: Request, res: Response) => {
+  try {
+    const stats = await pronunciationService.getPronunciationStats(req.userId!);
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error('Get voice practice stats error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get stats' });
+  }
+});
+
+router.get('/voice-practice/leaderboard', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const leaderboard = await pronunciationService.getLeaderboard(limit);
+    res.json({ success: true, data: leaderboard });
+  } catch (error) {
+    console.error('Get leaderboard error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get leaderboard' });
   }
 });
 

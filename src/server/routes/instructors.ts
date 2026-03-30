@@ -1,37 +1,44 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import { query } from '../db/pool';
+import { authenticate, requireInstructor, requireAdmin } from '../middleware/security';
+
+const Papa = require('papaparse');
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-const authenticate = (req: any, res: any, next: any) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ success: false, error: 'Không có token' });
-  try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    req.userId = decoded.userId;
-    next();
-  } catch {
-    return res.status(401).json({ success: false, error: 'Token không hợp lệ' });
+const verifyCourseOwnership = async (req: any, res: any, next: any) => {
+  const { courseId } = req.params;
+  const course = await query('SELECT teacher_id FROM courses WHERE id = $1', [courseId]);
+  
+  if (course.rows.length === 0) {
+    return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
   }
-};
 
-const requireInstructor = async (req: any, res: any, next: any) => {
-  const user = await query('SELECT role FROM users WHERE id = $1', [req.userId]);
-  if (!user.rows[0] || !['admin', 'super_admin', 'instructor'].includes(user.rows[0].role)) {
-    return res.status(403).json({ success: false, error: 'Không có quyền' });
+  if (req.userRole !== 'admin' && req.userRole !== 'super_admin' && course.rows[0].teacher_id !== req.userId) {
+    return res.status(403).json({ success: false, error: 'Bạn không có quyền truy cập khóa học này' });
   }
-  req.userRole = user.rows[0].role;
+  
   next();
 };
 
-const requireAdmin = async (req: any, res: any, next: any) => {
-  const user = await query('SELECT role FROM users WHERE id = $1', [req.userId]);
-  if (!user.rows[0] || !['admin', 'super_admin'].includes(user.rows[0].role)) {
-    return res.status(403).json({ success: false, error: 'Không có quyền' });
+const verifyLessonOwnership = async (req: any, res: any, next: any) => {
+  const { lessonId } = req.params;
+  const lesson = await query(
+    'SELECT l.*, c.teacher_id FROM lessons l JOIN courses c ON l.course_id = c.id WHERE l.id = $1',
+    [lessonId]
+  );
+  
+  if (lesson.rows.length === 0) {
+    return res.status(404).json({ success: false, error: 'Bài học không tồn tại' });
   }
+
+  if (req.userRole !== 'admin' && req.userRole !== 'super_admin' && lesson.rows[0].teacher_id !== req.userId) {
+    return res.status(403).json({ success: false, error: 'Bạn không có quyền với bài học này' });
+  }
+  
   next();
 };
 
@@ -264,6 +271,287 @@ router.put('/messages/:id/read', authenticate, requireInstructor, async (req, re
     console.error('Mark read error:', error);
     res.status(500).json({ success: false, error: 'Lỗi server' });
   }
+});
+
+// ========== GRAMMAR EXERCISES ==========
+router.get('/exercises/lesson/:lessonId', authenticate, requireInstructor, verifyLessonOwnership, async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const result = await query(
+      `SELECT * FROM grammar_exercises WHERE lesson_id = $1 ORDER BY order_index ASC`,
+      [lessonId]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Get exercises error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.post('/exercises', authenticate, requireInstructor, async (req, res) => {
+  try {
+    const { lesson_id, question, question_type, options, correct_answer, explanation, difficulty, order_index } = req.body;
+    const result = await query(
+      `INSERT INTO grammar_exercises (lesson_id, question, question_type, options, correct_answer, explanation, difficulty, order_index)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [lesson_id, question, question_type || 'multiple_choice', options || [], correct_answer, explanation, difficulty || 'easy', order_index || 0]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Create exercise error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.put('/exercises/:id', authenticate, requireInstructor, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { question, question_type, options, correct_answer, explanation, difficulty, order_index } = req.body;
+    const result = await query(
+      `UPDATE grammar_exercises SET question = COALESCE($1, question), question_type = COALESCE($2, question_type),
+       options = COALESCE($3, options), correct_answer = COALESCE($4, correct_answer), explanation = COALESCE($5, explanation),
+       difficulty = COALESCE($6, difficulty), order_index = COALESCE($7, order_index) WHERE id = $8 RETURNING *`,
+      [question, question_type, options, correct_answer, explanation, difficulty, order_index, id]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Update exercise error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.delete('/exercises/:id', authenticate, requireInstructor, async (req, res) => {
+  try {
+    await query('DELETE FROM grammar_exercises WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete exercise error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+// ========== VOCABULARY ==========
+router.get('/vocabulary/lesson/:lessonId', authenticate, requireInstructor, verifyLessonOwnership, async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const result = await query(
+      `SELECT * FROM vocabulary WHERE lesson_id = $1 ORDER BY id ASC`,
+      [lessonId]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Get vocabulary error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.post('/vocabulary', authenticate, requireInstructor, async (req, res) => {
+  try {
+    const { lesson_id, word, pinyin, meaning, example_sentence, audio_url, image_url, category, hsk_level } = req.body;
+    const result = await query(
+      `INSERT INTO vocabulary (lesson_id, word, pinyin, meaning, example_sentence, audio_url, image_url, category, hsk_level)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [lesson_id, word, pinyin, meaning, example_sentence, audio_url, image_url, category, hsk_level]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Create vocabulary error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.put('/vocabulary/:id', authenticate, requireInstructor, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { word, pinyin, meaning, example_sentence, audio_url, image_url, category, hsk_level } = req.body;
+    const result = await query(
+      `UPDATE vocabulary SET word = COALESCE($1, word), pinyin = COALESCE($2, pinyin), meaning = COALESCE($3, meaning),
+       example_sentence = COALESCE($4, example_sentence), audio_url = COALESCE($5, audio_url), image_url = COALESCE($6, image_url),
+       category = COALESCE($7, category), hsk_level = COALESCE($8, hsk_level) WHERE id = $9 RETURNING *`,
+      [word, pinyin, meaning, example_sentence, audio_url, image_url, category, hsk_level, id]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Update vocabulary error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.delete('/vocabulary/:id', authenticate, requireInstructor, async (req, res) => {
+  try {
+    await query('DELETE FROM vocabulary WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete vocabulary error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+// ========== LESSON RESOURCES ==========
+router.get('/resources/lesson/:lessonId', authenticate, requireInstructor, verifyLessonOwnership, async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const result = await query(
+      `SELECT * FROM lesson_resources WHERE lesson_id = $1 ORDER BY created_at DESC`,
+      [lessonId]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Get resources error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.post('/resources', authenticate, requireInstructor, async (req, res) => {
+  try {
+    const { lesson_id, title, type, url, description } = req.body;
+    
+    if (!lesson_id || !title || !type || !url) {
+      return res.status(400).json({ success: false, error: 'Thiếu thông tin bắt buộc' });
+    }
+
+    const result = await query(
+      `INSERT INTO lesson_resources (lesson_id, title, type, url, description)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [lesson_id, title, type, url, description]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Create resource error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.put('/resources/:id', authenticate, requireInstructor, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, type, url, description } = req.body;
+    
+    const result = await query(
+      `UPDATE lesson_resources 
+       SET title = COALESCE($1, title), type = COALESCE($2, type), 
+           url = COALESCE($3, url), description = COALESCE($4, description)
+       WHERE id = $5 RETURNING *`,
+      [title, type, url, description, id]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Update resource error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.delete('/resources/:id', authenticate, requireInstructor, async (req, res) => {
+  try {
+    await query('DELETE FROM lesson_resources WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete resource error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+// ========== STUDENT PROGRESS ==========
+router.get('/student-progress/:courseId', authenticate, requireInstructor, verifyCourseOwnership, async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const result = await query(`
+      SELECT u.id as user_id, u.full_name, u.email, u.mshv, u.avatar_url,
+             e.progress, e.status as enrollment_status, e.enrolled_at, e.completed_at,
+             COUNT(DISTINCT lp.lesson_id) as lessons_completed,
+             COUNT(DISTINCT l.id) as total_lessons,
+             COALESCE(SUM(lp.watched_seconds), 0) as total_watch_time
+      FROM users u
+      JOIN enrollments e ON e.user_id = u.id
+      JOIN courses c ON c.id = e.course_id
+      LEFT JOIN lessons l ON l.course_id = c.id AND l.is_published = true
+      LEFT JOIN lesson_progress lp ON lp.user_id = u.id AND lp.is_completed = true
+      WHERE c.teacher_id = $1 AND c.id = $2
+      GROUP BY u.id, e.progress, e.status, e.enrolled_at, e.completed_at
+      ORDER BY e.enrolled_at DESC
+    `, [req.userId, courseId]);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Get student progress error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+// ========== BULK IMPORT LESSONS ==========
+router.post('/lessons/import', authenticate, requireInstructor, (req: any, res: any) => {
+  upload.single('file')(req, res, async (err: any) => {
+    if (err) {
+      return res.status(400).json({ success: false, error: 'Lỗi upload file' });
+    }
+    try {
+      const { course_id } = req.body;
+      if (!course_id) {
+        return res.status(400).json({ success: false, error: 'Thiếu course_id' });
+      }
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'Thiếu file' });
+      }
+
+      const csvContent = req.file.buffer.toString('utf-8');
+      const parsed = Papa.parse(csvContent, { header: true, skip_empty_lines: true });
+      
+      if (parsed.errors && (parsed.errors as any[]).length > 0) {
+        return res.status(400).json({ success: false, error: 'Lỗi định dạng CSV' });
+      }
+
+      const lessons = parsed.data;
+      if (!lessons || lessons.length === 0) {
+        return res.status(400).json({ success: false, error: 'File CSV trống' });
+      }
+
+      const maxOrder = await query('SELECT COALESCE(MAX(order_index), 0) as max_order FROM lessons WHERE course_id = $1', [course_id]);
+      let orderIndex = maxOrder.rows[0]?.max_order || 0;
+
+      const insertedLessons: any[] = [];
+      const errors: string[] = [];
+
+      for (const row of lessons) {
+        try {
+          const title = row.title?.trim();
+          if (!title) {
+            errors.push(`Thiếu tiêu đề ở dòng ${errors.length + insertedLessons.length + 1}`);
+            continue;
+          }
+
+          orderIndex++;
+          const result = await query(`
+            INSERT INTO lessons (course_id, title, description, video_id, video_duration, is_free, is_published, order_index)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, title, order_index
+          `, [
+            course_id,
+            title,
+            row.description?.trim() || '',
+            row.video_id?.trim() || '',
+            parseInt(row.video_duration) || 0,
+            row.is_free?.toLowerCase() === 'true' || row.is_free === '1',
+            row.is_published?.toLowerCase() !== 'false' && row.is_published !== '0',
+            orderIndex
+          ]);
+          insertedLessons.push(result.rows[0]);
+        } catch (err) {
+          errors.push(`Lỗi khi thêm: ${row.title}`);
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        data: { 
+          imported: insertedLessons.length, 
+          lessons: insertedLessons,
+          errors 
+        }
+      });
+    } catch (error) {
+      console.error('Bulk import error:', error);
+      res.status(500).json({ success: false, error: 'Lỗi server khi import' });
+    }
+  });
 });
 
 export default router;

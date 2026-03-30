@@ -1,37 +1,34 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../db/pool';
+import { socketService } from '../utils/socket';
+import { authenticate } from '../middleware/security';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-const authenticate = (req: any, res: any, next: any) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ success: false, error: 'Không có token' });
+router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    req.userId = decoded.userId;
-    next();
-  } catch {
-    return res.status(401).json({ success: false, error: 'Token không hợp lệ' });
-  }
-};
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const unreadOnly = req.query.unread === 'true';
 
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const { limit = 20, offset = 0 } = req.query;
-    const result = await query(`
-      SELECT * FROM notifications 
-      WHERE user_id = $1 
-      ORDER BY created_at DESC 
-      LIMIT $2 OFFSET $3
-    `, [req.userId, limit, offset]);
-    
-    const count = await query('SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false', [req.userId]);
-    
-    res.json({ 
-      success: true, 
+    let whereClause = 'WHERE user_id = $1';
+    if (unreadOnly) {
+      whereClause += ' AND is_read = false';
+    }
+
+    const result = await query(
+      `SELECT * FROM user_notifications ${whereClause} ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+      [req.userId, limit, offset]
+    );
+
+    const count = await query(
+      'SELECT COUNT(*) FROM user_notifications WHERE user_id = $1 AND is_read = false',
+      [req.userId]
+    );
+
+    res.json({
+      success: true,
       data: result.rows,
       unreadCount: parseInt(count.rows[0].count)
     });
@@ -41,9 +38,15 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-router.put('/:id/read', authenticate, async (req, res) => {
+router.put('/:id/read', authenticate, async (req: Request, res: Response) => {
   try {
-    await query('UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+    const { id } = req.params;
+
+    await query(
+      'UPDATE user_notifications SET is_read = true, read_at = NOW() WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+
     res.json({ success: true });
   } catch (error) {
     console.error('Mark read error:', error);
@@ -51,9 +54,13 @@ router.put('/:id/read', authenticate, async (req, res) => {
   }
 });
 
-router.put('/read-all', authenticate, async (req, res) => {
+router.put('/read-all', authenticate, async (req: Request, res: Response) => {
   try {
-    await query('UPDATE notifications SET is_read = true WHERE user_id = $1', [req.userId]);
+    await query(
+      'UPDATE user_notifications SET is_read = true, read_at = NOW() WHERE user_id = $1 AND is_read = false',
+      [req.userId]
+    );
+
     res.json({ success: true });
   } catch (error) {
     console.error('Mark all read error:', error);
@@ -61,9 +68,12 @@ router.put('/read-all', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   try {
-    await query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+    const { id } = req.params;
+
+    await query('DELETE FROM user_notifications WHERE id = $1 AND user_id = $2', [id, req.userId]);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Delete notification error:', error);
@@ -71,12 +81,130 @@ router.delete('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Create notification helper
-export const createNotification = async (userId: string, type: string, title: string, message: string, data?: any) => {
-  await query(
-    'INSERT INTO notifications (user_id, type, title, message, data) VALUES ($1, $2, $3, $4, $5)',
+router.get('/preferences', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query(
+      'SELECT * FROM notification_preferences WHERE user_id = $1',
+      [req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      const newPrefs = await query(
+        `INSERT INTO notification_preferences (user_id) VALUES ($1) RETURNING *`,
+        [req.userId]
+      );
+      return res.json({ success: true, data: newPrefs.rows[0] });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Get preferences error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.put('/preferences', authenticate, async (req: Request, res: Response) => {
+  try {
+    const {
+      email_enabled,
+      push_enabled,
+      in_app_enabled,
+      notify_achievements,
+      notify_course_updates,
+      notify_community,
+      notify_friend_requests,
+      notify_quiz_results,
+      notify_promotions,
+      quiet_hours_start,
+      quiet_hours_end
+    } = req.body;
+
+    const result = await query(
+      `INSERT INTO notification_preferences (user_id, email_enabled, push_enabled, in_app_enabled,
+        notify_achievements, notify_course_updates, notify_community, notify_friend_requests,
+        notify_quiz_results, notify_promotions, quiet_hours_start, quiet_hours_end)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (user_id) DO UPDATE SET
+         email_enabled = COALESCE($2, notification_preferences.email_enabled),
+         push_enabled = COALESCE($3, notification_preferences.push_enabled),
+         in_app_enabled = COALESCE($4, notification_preferences.in_app_enabled),
+         notify_achievements = COALESCE($5, notification_preferences.notify_achievements),
+         notify_course_updates = COALESCE($6, notification_preferences.notify_course_updates),
+         notify_community = COALESCE($7, notification_preferences.notify_community),
+         notify_friend_requests = COALESCE($8, notification_preferences.notify_friend_requests),
+         notify_quiz_results = COALESCE($9, notification_preferences.notify_quiz_results),
+         notify_promotions = COALESCE($10, notification_preferences.notify_promotions),
+         quiet_hours_start = COALESCE($11, notification_preferences.quiet_hours_start),
+         quiet_hours_end = COALESCE($12, notification_preferences.quiet_hours_end),
+         updated_at = NOW()
+       RETURNING *`,
+      [req.userId, email_enabled, push_enabled, in_app_enabled, notify_achievements,
+        notify_course_updates, notify_community, notify_friend_requests, notify_quiz_results,
+        notify_promotions, quiet_hours_start, quiet_hours_end]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+export const createNotification = async (
+  userId: string,
+  type: string,
+  title: string,
+  message: string,
+  data?: Record<string, any>
+): Promise<void> => {
+  const result = await query(
+    `INSERT INTO user_notifications (user_id, type, title, message, data, is_delivered)
+     VALUES ($1, $2, $3, $4, $5, true)
+     RETURNING *`,
     [userId, type, title, message, data ? JSON.stringify(data) : null]
   );
+
+  const notification = result.rows[0];
+
+  const prefs = await query(
+    'SELECT * FROM notification_preferences WHERE user_id = $1',
+    [userId]
+  );
+
+  const shouldNotify = prefs.rows.length === 0 || prefs.rows[0].in_app_enabled;
+
+  if (shouldNotify && socketService.isUserOnline(userId)) {
+    socketService.sendNotification(userId, {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data,
+      createdAt: notification.created_at
+    });
+  }
+};
+
+export const broadcastNotification = async (
+  type: string,
+  title: string,
+  message: string,
+  data?: Record<string, any>,
+  targetRole?: string
+): Promise<void> => {
+  const result = await query(
+    `INSERT INTO user_notifications (user_id, type, title, message, data)
+     SELECT id, $1, $2, $3, $4 FROM users WHERE ($5 IS NULL OR role = $5)`,
+    [type, title, message, data ? JSON.stringify(data) : null, targetRole]
+  );
+
+  socketService.broadcast('notification', {
+    type,
+    title,
+    message,
+    data,
+    createdAt: new Date()
+  });
 };
 
 export default router;

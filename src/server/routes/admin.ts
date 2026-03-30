@@ -1,27 +1,12 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { query } from '../db/pool';
+import { authenticate, requireAdmin } from '../middleware/security';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-const authenticate = (req: any, res: any, next: any) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ success: false, error: 'Không có token' });
-  try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role: string };
-    req.userId = decoded.userId;
-    req.userRole = decoded.role;
-    if (decoded.role !== 'admin') return res.status(403).json({ success: false, error: 'Không có quyền admin' });
-    next();
-  } catch {
-    return res.status(401).json({ success: false, error: 'Token không hợp lệ' });
-  }
-};
 
 router.use(authenticate);
+router.use(requireAdmin);
 
 router.get('/stats', async (req, res) => {
   try {
@@ -48,12 +33,26 @@ router.get('/stats', async (req, res) => {
 
 router.get('/users', async (req, res) => {
   try {
-    const { page = '1', limit = '20', search } = req.query;
-    let sql = 'SELECT id, email, full_name, role, level, coins, created_at FROM users';
+    const { page = '1', limit = '20', search, role, mshv } = req.query;
+    let sql = 'SELECT id, email, full_name, role, level, coins, mshv, created_at FROM users';
     const params: any[] = [];
+    const conditions: string[] = [];
+    
     if (search) {
-      sql += ' WHERE full_name ILIKE $1 OR email ILIKE $1';
+      conditions.push(`(full_name ILIKE $${params.length + 1} OR email ILIKE $${params.length + 1} OR mshv ILIKE $${params.length + 1})`);
       params.push(`%${search}%`);
+    }
+    if (role) {
+      conditions.push(`role = $${params.length + 1}`);
+      params.push(role);
+    }
+    if (mshv) {
+      conditions.push(`mshv ILIKE $${params.length + 1}`);
+      params.push(`%${mshv}%`);
+    }
+    
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
     }
     sql += ' ORDER BY created_at DESC';
     const result = await query(sql, params);
@@ -67,10 +66,41 @@ router.get('/users', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { full_name, role, level, coins } = req.body;
+    const { full_name, role, level, coins, mshv } = req.body;
+    
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+    
+    if (full_name !== undefined) {
+      updates.push(`full_name = $${paramIndex++}`);
+      params.push(full_name);
+    }
+    if (role !== undefined) {
+      updates.push(`role = $${paramIndex++}`);
+      params.push(role);
+    }
+    if (level !== undefined) {
+      updates.push(`level = $${paramIndex++}`);
+      params.push(level);
+    }
+    if (coins !== undefined) {
+      updates.push(`coins = $${paramIndex++}`);
+      params.push(coins);
+    }
+    if (mshv !== undefined) {
+      updates.push(`mshv = $${paramIndex++}`);
+      params.push(mshv);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'Không có dữ liệu để cập nhật' });
+    }
+    
+    params.push(id);
     const result = await query(
-      `UPDATE users SET full_name = COALESCE($1, full_name), role = COALESCE($2, role), level = COALESCE($3, level), coins = COALESCE($4, coins) WHERE id = $5 RETURNING id, email, full_name, role, level, coins, created_at`,
-      [full_name, role, level, coins, id]
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING id, email, full_name, role, level, coins, mshv, created_at`,
+      params
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Người dùng không tồn tại' });
@@ -179,7 +209,66 @@ router.get('/courses/pending', async (req, res) => {
   }
 });
 
-router.put('/courses/:id/approve', async (req, res) => {
+// Add user to free course
+router.post('/courses/:id/free-users', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, action } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'Thiếu userId' });
+    }
+
+    const course = await query('SELECT free_for_users FROM courses WHERE id = $1', [id]);
+    if (course.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
+    }
+
+    let freeUsers: string[] = course.rows[0].free_for_users || [];
+
+    if (action === 'add') {
+      if (!freeUsers.includes(userId)) {
+        freeUsers.push(userId);
+      }
+    } else if (action === 'remove') {
+      freeUsers = freeUsers.filter((id: string) => id !== userId);
+    }
+
+    await query('UPDATE courses SET free_for_users = $1 WHERE id = $2', [JSON.stringify(freeUsers), id]);
+
+    res.json({ success: true, data: { free_for_users: freeUsers } });
+  } catch (error) {
+    console.error('Manage free users error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+// Get free users of a course
+router.get('/courses/:id/free-users', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const course = await query('SELECT free_for_users FROM courses WHERE id = $1', [id]);
+    
+    if (course.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
+    }
+
+    const freeUsers: string[] = course.rows[0].free_for_users || [];
+    
+    // Get user details
+    const users = await query(
+      'SELECT id, email, full_name FROM users WHERE id = ANY($1)',
+      [freeUsers]
+    );
+
+    res.json({ success: true, data: users.rows });
+  } catch (error) {
+    console.error('Get free users error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
+router.put('/courses/:id/approve', async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const result = await query(

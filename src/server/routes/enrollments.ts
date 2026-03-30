@@ -50,6 +50,26 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Đã đăng ký khóa học này' });
     }
 
+    const course = await query('SELECT * FROM courses WHERE id = $1', [course_id]);
+    if (course.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Khóa học không tồn tại' });
+    }
+
+    const courseData = course.rows[0];
+    const isFree = courseData.course_type === 'free' || courseData.is_free_for_all === true;
+    const freeUsers = courseData.free_for_users || [];
+    const isUserInFreeList = Array.isArray(freeUsers) && freeUsers.includes(req.userId);
+
+    const paidCheck = await query(
+      "SELECT id FROM payments WHERE user_id = $1 AND course_id = $2 AND status = 'completed'",
+      [req.userId, course_id]
+    );
+    const hasPaid = paidCheck.rows.length > 0;
+
+    if (!isFree && !isUserInFreeList && !hasPaid) {
+      return res.status(403).json({ success: false, error: 'Khóa học này yêu cầu thanh toán' });
+    }
+
     const result = await query(
       `INSERT INTO enrollments (user_id, course_id, progress, status)
        VALUES ($1, $2, 0, 'active')

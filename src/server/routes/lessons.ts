@@ -151,4 +151,22 @@ router.delete('/:id', authenticate, requireInstructor, async (req, res) => {
   }
 });
 
+router.get('/:id/resources', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = await query(
+      `SELECT lr.* FROM lesson_resources lr
+       WHERE lr.lesson_id = $1
+       ORDER BY lr.created_at ASC`,
+      [id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Get resources error:', error);
+    res.status(500).json({ success: false, error: 'Lỗi server' });
+  }
+});
+
 export default router;
