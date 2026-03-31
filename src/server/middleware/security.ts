@@ -4,8 +4,8 @@ import { query } from '../db/pool';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-if (!JWT_SECRET || JWT_SECRET === 'your-production-secret-key-change-this' || JWT_SECRET === 'your-secret-key') {
-  console.error('⚠️  SECURITY WARNING: JWT_SECRET is not properly configured in production!');
+if (!JWT_SECRET) {
+  throw new Error('⚠️  CRITICAL: JWT_SECRET is not set in environment variables!');
 }
 
 export const authLimiter = rateLimit({
@@ -50,7 +50,7 @@ export const authenticate = (req: any, res: any, next: any) => {
   const token = authHeader.split(' ')[1];
   
   try {
-    const decoded = jwt.verify(token, JWT_SECRET || 'fallback-secret') as { userId: string; role: string; iat: number; exp: number };
+    const decoded = jwt.verify(token, JWT_SECRET!) as { userId: string; role: string; iat: number; exp: number };
     
     const tokenAge = Date.now() / 1000 - decoded.iat;
     if (tokenAge > 7 * 24 * 60 * 60) {

@@ -1,8 +1,39 @@
+# Dependencies
 node_modules
+src/server/node_modules
 dist
+src/server/dist
+coverage
+
+# Environment variables
+.env
 .env.local
 .env.*.local
-.env
-.DS_Store
-*.log
+.env.production
+.env.*.production
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Logs
 logs
+src/server/logs/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.log
+npm-debug.log*
+
+# Secrets
+*.pem
+*.key
+ssl/
