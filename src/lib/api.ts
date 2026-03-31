@@ -1,31 +1,18 @@
 import type { ApiResponse } from '../types/database';
 
-<<<<<<< HEAD
-// Static API URL for production - always use Render backend
-const API_BASE_URL = 'https://hoangu-lms-api.onrender.com/api';
-=======
-// Dynamic API URL - uses environment variable or constructs based on environment
+// Dynamic API URL - uses current host if available, fallback to env or localhost
 const getApiUrl = () => {
-  // Use environment variable if set (for production)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  // Development: localhost
-  if (import.meta.env.DEV || typeof window === 'undefined') {
-    return 'http://localhost:3000/api';
+  // For network access, construct URL from current location
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `${window.location.protocol}//${window.location.hostname}:3000/api`;
   }
-  // Production: use same domain with /api
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
-  // When on production, try to connect to backend on render or same domain
-  if (hostname === 'hoangu.techhave.com' || hostname === 'www.hoangu.techhave.com') {
-    return 'https://hoangu-lms-api.onrender.com/api';
-  }
-  return `${protocol}//${hostname}:3000/api`;
+  return 'http://localhost:3000/api';
 };
 
 const API_BASE_URL = getApiUrl();
->>>>>>> f29fe1a95bef9fd60de6c86bd8ce50d5d6db9011
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
