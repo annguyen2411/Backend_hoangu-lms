@@ -8,23 +8,28 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
 }
 
-export function Button({ 
-  variant = 'primary', 
-  size = 'md', 
-  children, 
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  children,
   icon,
   fullWidth = false,
   className = '',
-  ...props 
+  ...props
 }: ButtonProps) {
-  const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed';
-  
+  const baseStyles =
+    'inline-flex items-center justify-center gap-2 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+
   const variants = {
-    default: 'bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] shadow-sm hover:shadow-md active:scale-95',
-    secondary: 'bg-[var(--secondary)] text-white hover:bg-[var(--secondary-hover)] shadow-sm hover:shadow-md active:scale-95',
-    outline: 'bg-transparent border-2 border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white active:scale-95',
-    ghost: 'bg-transparent text-foreground hover:bg-[var(--muted)] active:scale-95',
-    danger: 'bg-[var(--error)] text-white hover:opacity-90 shadow-sm hover:shadow-md active:scale-95',
+    default:
+      'bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] shadow-sm hover:shadow-md active:scale-95',
+    secondary:
+      'bg-[var(--secondary)] text-black hover:bg-[var(--secondary-hover)] shadow-sm hover:shadow-md active:scale-95',
+    outline:
+      'bg-transparent border-2 border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-100)] active:scale-95',
+    ghost: 'bg-transparent text-[var(--primary)] hover:bg-[var(--primary-100)] active:scale-95',
+    danger:
+      'bg-[var(--error)] text-white hover:opacity-90 shadow-sm hover:shadow-md active:scale-95',
   };
 
   const sizeStyles = {

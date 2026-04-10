@@ -15,13 +15,13 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
       <div
         ref={ref}
         className={cn(
-          'relative h-2 w-full overflow-hidden rounded-full bg-muted',
+          'relative h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]',
           className
         )}
         {...props}
       >
         <div
-          className="h-full w-full flex-1 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] transition-all duration-300 ease-in-out"
+          className="h-full w-full flex-1 bg-gradient-to-r from-[var(--primary)] via-[var(--primary-light)] to-[var(--secondary)] transition-all duration-300 ease-in-out"
           style={{ transform: `translateX(-${100 - percentage}%)` }}
         />
       </div>

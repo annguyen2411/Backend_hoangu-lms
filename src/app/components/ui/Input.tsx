@@ -10,16 +10,10 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ 
-    label, 
-    error, 
-    helperText, 
-    leftIcon, 
-    rightIcon, 
-    fullWidth = false,
-    className = '',
-    ...props 
-  }, ref) => {
+  (
+    { label, error, helperText, leftIcon, rightIcon, fullWidth = false, className = '', ...props },
+    ref
+  ) => {
     const widthStyle = fullWidth ? 'w-full' : '';
 
     return (
@@ -30,21 +24,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             {props.required && <span className="text-[var(--error)] ml-1">*</span>}
           </label>
         )}
-        
+
         <div className="relative">
           {leftIcon && (
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
               {leftIcon}
             </div>
           )}
-          
+
           <input
             ref={ref}
             className={`
-              w-full px-4 py-2.5 rounded-lg border border-border
-              bg-white text-foreground
+              w-full px-4 py-2.5 rounded-lg border border-[var(--input-border)]
+              bg-[var(--input-background)] text-[var(--foreground)]
               transition-all
-              focus:outline-none focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary-light)]
+              focus:outline-none focus:border-[var(--input-focus)] focus:ring-2 focus:ring-[var(--primary-200)]
               disabled:bg-[var(--muted)] disabled:cursor-not-allowed
               ${leftIcon ? 'pl-10' : ''}
               ${rightIcon ? 'pr-10' : ''}
@@ -53,7 +47,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             `}
             {...props}
           />
-          
+
           {rightIcon && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
               {rightIcon}
@@ -61,10 +55,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
 
-        {error && (
-          <p className="mt-1.5 text-xs text-[var(--error)]">{error}</p>
-        )}
-        
+        {error && <p className="mt-1.5 text-xs text-[var(--error)]">{error}</p>}
+
         {helperText && !error && (
           <p className="mt-1.5 text-xs text-muted-foreground">{helperText}</p>
         )}

@@ -8,12 +8,12 @@ interface CardProps {
   onClick?: () => void;
 }
 
-export function Card({ 
-  children, 
-  className = '', 
-  hover = false, 
+export function Card({
+  children,
+  className = '',
+  hover = false,
   padding = 'md',
-  onClick 
+  onClick,
 }: CardProps) {
   const paddingStyles = {
     none: '',
@@ -27,7 +27,7 @@ export function Card({
 
   return (
     <div
-      className={`bg-white rounded-xl border border-border shadow-sm transition-all ${paddingStyles[padding]} ${hoverStyle} ${clickableStyle} ${className}`}
+      className={`bg-[var(--card)] rounded-xl border border-[var(--border)] shadow-sm transition-all ${paddingStyles[padding]} ${hoverStyle} ${clickableStyle} ${className}`}
       onClick={onClick}
     >
       {children}
@@ -41,11 +41,7 @@ interface CardHeaderProps {
 }
 
 export function CardHeader({ children, className = '' }: CardHeaderProps) {
-  return (
-    <div className={`mb-4 ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`mb-4 ${className}`}>{children}</div>;
 }
 
 interface CardTitleProps {
@@ -54,11 +50,7 @@ interface CardTitleProps {
 }
 
 export function CardTitle({ children, className = '' }: CardTitleProps) {
-  return (
-    <h3 className={`font-semibold text-lg ${className}`}>
-      {children}
-    </h3>
-  );
+  return <h3 className={`font-semibold text-lg ${className}`}>{children}</h3>;
 }
 
 interface CardDescriptionProps {
@@ -67,11 +59,7 @@ interface CardDescriptionProps {
 }
 
 export function CardDescription({ children, className = '' }: CardDescriptionProps) {
-  return (
-    <p className={`text-sm text-muted-foreground mt-1 ${className}`}>
-      {children}
-    </p>
-  );
+  return <p className={`text-sm text-muted-foreground mt-1 ${className}`}>{children}</p>;
 }
 
 interface CardContentProps {
@@ -80,11 +68,7 @@ interface CardContentProps {
 }
 
 export function CardContent({ children, className = '' }: CardContentProps) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 interface CardFooterProps {
@@ -93,9 +77,5 @@ interface CardFooterProps {
 }
 
 export function CardFooter({ children, className = '' }: CardFooterProps) {
-  return (
-    <div className={`mt-6 pt-4 border-t border-border ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`mt-6 pt-4 border-t border-border ${className}`}>{children}</div>;
 }
