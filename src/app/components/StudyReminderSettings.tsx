@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Bell, Clock, Zap, Flame } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { Label } from './ui/Label';
+import { Switch } from './ui/Switch';
+import { notificationManager } from '../utils/notificationManager';
 
 export function StudyReminderSettings() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');

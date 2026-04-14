@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BookOpen, Plus, Edit, Trash2, Video, Eye, Users, Clock, Check, X, Save, GraduationCap, BarChart3, MessageCircle, DollarSign, Send, User, LayoutDashboard, Upload, FileText, List, TrendingUp, Play, BookMarked, ChevronDown, ChevronRight, Download } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, Video, Eye, Users, Clock, Check, X, Save, GraduationCap, BarChart3, MessageCircle, DollarSign, Send, User, LayoutDashboard, Upload, FileText, List, TrendingUp, Play, BookMarked, ChevronDown, ChevronRight, Download, GraduationCap as InstructorIcon } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/Card';

@@ -14,7 +14,7 @@ interface Vocabulary {
   meaning: string;
 }
 
-interface VoicePractice {
+interface VoiceRecording {
   id: string;
   recording_url: string;
   transcript: string;
@@ -25,13 +25,13 @@ interface VoicePractice {
   created_at: string;
 }
 
-export function VoicePractice() {
+export function VoicePracticePage() {
   const { user, isAuthenticated } = useAuth();
   const [vocabulary, setVocabulary] = useState<Vocabulary[]>([]);
   const [currentWord, setCurrentWord] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [history, setHistory] = useState<VoicePractice[]>([]);
+  const [history, setHistory] = useState<VoiceRecording[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [hskLevel, setHskLevel] = useState(1);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);

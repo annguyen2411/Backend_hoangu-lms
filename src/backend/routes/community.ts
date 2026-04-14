@@ -12,7 +12,9 @@ const optionalAuth = (req: any, res: any, next: any) => {
       const token = authHeader.split(' ')[1];
       const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
       req.userId = decoded.userId;
-    } catch {}
+    } catch {
+        // token is invalid, continue without user
+      }
   }
   next();
 };

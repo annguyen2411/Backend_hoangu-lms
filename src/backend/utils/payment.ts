@@ -116,7 +116,7 @@ class VNPayService {
   }
 
   private formatDate(date: Date): string {
-    return date.toISOString().replace(/[-:T\.\s]/g, '').slice(0, 14);
+    return date.toISOString().replace(/[-:T.\s]/g, '').slice(0, 14);
   }
 
   getPaymentStatusUrl(txnRef: string): string {

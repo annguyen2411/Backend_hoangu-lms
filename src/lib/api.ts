@@ -265,7 +265,7 @@ class ApiClient {
     delete: (id: string) => this.delete<ApiResponse<any>>(`/lessons/${id}`),
   };
 
-  quizzes = {
+  studentQuizzes = {
     getByLesson: (lessonId: string) =>
       this.get<ApiResponse<any[]>>(`/student/exercises/lesson/${lessonId}`),
 
@@ -707,7 +707,7 @@ class ApiClient {
   };
 
   // Quizzes
-  quizzes = {
+  siteQuizzes = {
     getDaily: () => this.get('/quizzes/daily'),
     submitAnswer: (quizId: string, answerIndex: number) =>
       this.post('/quizzes/submit', { quiz_id: quizId, answer_index: answerIndex }),

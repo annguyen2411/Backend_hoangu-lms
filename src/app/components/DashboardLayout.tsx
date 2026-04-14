@@ -10,7 +10,7 @@ import { studentNavigation, getDashboardTitle } from '../config/navigation';
 
 export function DashboardLayout() {
   const location = useLocation();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (isLoading) {

@@ -22,10 +22,11 @@ export function RecommendationsPanel({ variant = 'full' }: RecommendationsPanelP
       case 'time':
         setRecommendations(recommendationEngine.getTimeBasedRecommendations());
         break;
-      case 'difficulty':
+      case 'difficulty': {
         const prefs = recommendationEngine.getPreferences();
         setRecommendations(recommendationEngine.getDifficultyRecommendations(prefs.difficulty));
         break;
+      }
       default:
         setRecommendations(recommendationEngine.generateRecommendations());
     }

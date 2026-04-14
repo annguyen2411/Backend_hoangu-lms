@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import { Settings as SettingsIcon, User, Bell, Lock, Globe, Moon, Zap, Download, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/Card';
@@ -13,6 +14,7 @@ import { LoginPrompt } from '../components/LoginPrompt';
 import { api } from '../../lib/api';
 
 export function Settings() {
+  const navigate = useNavigate();
   const { profile, isAuthenticated, isLoading, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'offline'>('profile');
   const [notifications, setNotifications] = useState({
@@ -96,18 +98,6 @@ export function Settings() {
     // Will show login prompt instead of navigating
   }, [isAuthenticated]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <LoginPrompt />;
-  }
-
   useEffect(() => {
     if (profile) {
       setNotifications({
@@ -120,6 +110,18 @@ export function Settings() {
       });
     }
   }, [profile]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPrompt />;
+  }
 
   const handleSaveNotifications = async () => {
     setSaving(true);

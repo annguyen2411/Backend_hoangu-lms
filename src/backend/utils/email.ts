@@ -1,4 +1,5 @@
 import { logInfo, logError } from './logger';
+import Resend from 'resend';
 
 interface EmailOptions {
   to: string;
@@ -47,8 +48,7 @@ class EmailService {
 
   private async sendWithResend(to: string, subject: string, html: string): Promise<boolean> {
     try {
-      const resend = require('resend');
-      const resendClient = new resend.Resend(this.resendApiKey);
+      const resendClient = new Resend(this.resendApiKey);
 
       const result = await resendClient.emails.send({
         from: `${this.fromName} <${this.fromEmail}>`,

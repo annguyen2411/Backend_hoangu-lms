@@ -571,13 +571,13 @@ export function Landing() {
                     className="w-10 h-10 rounded-lg bg-white flex items-center justify-center"
                     style={{ color: COLORS.jade }}
                   >
-                    <Fire className="w-5 h-5" />
+                    <Flame className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="text-xs text-white/90">Chuỗi học tập</div>
                     <div className="text-xl font-extrabold text-white">
                       {userData.studyStreak} <span className="text-sm font-normal">ngày</span>
-                      <Fire className="w-4 h-4 inline ml-1 text-orange-500" />
+                      <Flame className="w-4 h-4 inline ml-1 text-orange-500" />
                     </div>
                   </div>
                 </div>

@@ -104,7 +104,9 @@ export function VideoPlayer({ src, videoId, poster, title, onProgress, onProgres
             setBuffered(100);
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        // eslint-disable-next-line no-empty
+      }
     }, 1000);
 
     return () => clearInterval(interval);

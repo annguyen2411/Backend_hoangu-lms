@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { query } from '../db/pool';
 
 const router = Router();
@@ -31,7 +32,6 @@ router.get('/my-rank', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const jwt = require('jsonwebtoken');
     const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
 

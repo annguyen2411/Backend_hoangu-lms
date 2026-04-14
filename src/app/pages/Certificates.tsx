@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { Award, Download, Share2, Eye, CheckCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -10,6 +11,7 @@ import { toast } from 'sonner';
 import { LoginPrompt, LoadingSpinner } from '../components/LoginPrompt';
 
 export function Certificates() {
+  const navigate = useNavigate();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [certificates, setCertificates] = useState<Certificate[]>([]);

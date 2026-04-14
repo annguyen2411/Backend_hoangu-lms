@@ -2,8 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { query } from '../db/pool';
 import { authenticate, requireInstructor, requireAdmin } from '../middleware/security';
-
-const Papa = require('papaparse');
+import Papa from 'papaparse';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
